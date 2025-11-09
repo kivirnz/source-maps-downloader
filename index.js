@@ -57,20 +57,22 @@ function extractChunkReferences(jsContent, baseUrl) {
     const extensionMatch = chunkDefinition.match(/["'](\.chunk\.js|\.js|\.mjs)["']/);
     const extension = extensionMatch ? extensionMatch[1] : '.chunk.js';
     
-    // Build chunk URLs
-    for (const [id, data] of Object.entries(chunksById)) {
-      const name = data.name || id;
-      const hash = data.hash || '';
-      
-      let chunkPath;
-      if (hash) {
-        chunkPath = `/${basePath}${name}.${hash}${extension}`;
-      } else {
-        chunkPath = `/${basePath}${name}${extension}`;
-      }
-      
-      chunks.add(chunkPath);
-    }
+// Build chunk URLs
+for (const [id, data] of Object.entries(chunksById)) {
+  const { name = '', hash = '' } = data;
+
+  // Compose filename parts dynamically, skipping empty ones
+  const parts = [id, name, hash].filter(Boolean);
+  const filename = parts.join('.');
+
+  // Ensure basePath ends with '/'
+  const normalizedBase = basePath.endsWith('/') ? basePath : `${basePath}/`;
+
+  // Build final chunk path
+  const chunkPath = `${normalizedBase}${filename}${extension}`;
+
+  chunks.add(chunkPath);
+}
   }
   
   // Pattern 2: CSS chunk manifest
