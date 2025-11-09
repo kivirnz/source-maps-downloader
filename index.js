@@ -276,7 +276,7 @@ async function downloadSourceMaps(websiteUrl, shouldRecord) {
       if (contentType.includes('application/javascript') || 
           contentType.includes('text/javascript') ||
           url.endsWith('.js')) {
-        networkJsFiles.add(url);
+      //  networkJsFiles.add(url);
       }
     });
 
