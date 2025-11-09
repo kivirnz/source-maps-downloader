@@ -1,15 +1,17 @@
 # Source Map Downloader
 
-This Node.js script automates the process of downloading and extracting source maps from websites. It uses Puppeteer to navigate web pages, captures all JavaScript files (including lazy-loaded ones), processes their source maps to reconstruct the original source files, and optionally records the browser session.
+An intelligent Node.js tool that extracts source maps from modern web applications (React, Vue, Angular, etc.). Unlike simple network sniffers, this tool **parses JavaScript bundles to discover ALL chunks**, including lazy-loaded ones that may never be triggered during a normal browsing session.
 
 ## Features
 
-- Automated navigation of web pages using Puppeteer
-- Captures all JavaScript files, including those that are lazy-loaded
-- Extracts and processes source maps
-- Reconstructs original source files
-- Saves both compiled JavaScript and original source files
-- Optional screen recording of the browser session
+- **Intelligent Chunk Discovery**: Parses main/runtime JS files to find ALL chunk references
+- **Comprehensive Coverage**: Finds lazy-loaded chunks that traditional network monitoring misses
+- **Multi-Framework Support**: Works with Webpack, Vite, Rollup, and other bundlers
+- **React-Optimized**: Especially effective at extracting React app source maps
+- **Network Monitoring**: Also captures JS files loaded via network requests
+- **Source Reconstruction**: Extracts original source files from source maps
+- **Optional Screen Recording**: Record browser session for debugging
+- **Organized Output**: Saves source maps, original sources, and compiled JS separately
 
 ## Prerequisites
 
@@ -26,8 +28,10 @@ To install the Source Map Downloader, follow these steps:
 2. Navigate to the project directory.
 3. Install the required dependencies:
 
-```
-npm install fs path axios source-map puppeteer puppeteer-screen-recorder
+```bash
+yarn install
+# or
+npm install
 ```
 
 ## Using Source Map Downloader
@@ -46,40 +50,93 @@ Replace `https://example.com` with the URL of the website you want to download s
 
 ### Command-line Options
 
-- `--url <domain>`: (Required) Specify the website URL to process.
+- `--url <website-url>`: (Required) Specify the website URL to process.
 - `--record`: (Optional) Enable screen recording of the browser session.
+
+### Examples
+
+```bash
+# Basic usage - extract source maps from a React app
+node index.js --url https://react-app.example.com
+
+# With screen recording
+node index.js --url https://app.example.com --record
+
+# Extract from a production site
+node index.js --url https://dashboard.company.com
+```
 
 ## How it works
 
-1. The script uses Puppeteer to open the specified URL in a headless browser.
-2. If the `--record` option is used, it starts recording the browser session.
-3. It captures all JavaScript files loaded by the page, including lazy-loaded scripts.
-4. For each JavaScript file, it looks for a source map URL.
-5. If a source map is found, it's downloaded and processed.
-6. The original source files are reconstructed from the source map.
-7. Both the compiled JavaScript and the original source files are saved to the `sources` directory.
-8. If recording was enabled, the video is saved in the `screenRecordings` directory.
+1. **Browser Launch**: Opens the target URL using Puppeteer with a realistic user agent.
+2. **Network Monitoring**: Captures all JS files loaded via network requests.
+3. **Main File Discovery**: Identifies main/runtime JS files that contain chunk manifests (prioritizing files with keywords like 'runtime', 'main', 'vendor').
+4. **Chunk Parsing**: Analyzes main JS files using regex patterns to extract ALL chunk references:
+   - Webpack chunk loading patterns
+   - Dynamic import() statements
+   - Chunk manifests and mappings
+   - Static script references
+5. **Comprehensive Collection**: Combines discovered chunks with network-captured files.
+6. **Source Map Extraction**: For each JS file:
+   - Downloads the file
+   - Finds source map reference (`//# sourceMappingURL=...`)
+   - Downloads the source map
+   - Extracts all original source files
+7. **Organized Storage**: Saves everything in structured directories:
+   - `output/{hostname}/sourcemaps/` - Source map files
+   - `output/{hostname}/sources/` - Original source code
+   - `output/{hostname}/compiled/` - Compiled/bundled JS files
+8. **Optional Recording**: If `--record` is enabled, saves browser session video.
 
 ## Directory Structure
 
-- `sources/`: Contains all downloaded source files and compiled JavaScript.
-    - The directory structure within `sources` mirrors the structure of the URLs from which the files were downloaded.
-- `screenRecordings/`: Contains the recorded browser sessions (if the `--record` option is used).
+```
+output/
+└── {hostname}/
+    ├── sourcemaps/     # Source map JSON files
+    │   ├── main.js.map
+    │   └── chunk-123.js.map
+    ├── sources/        # Original source code (reconstructed)
+    │   ├── src/
+    │   │   ├── App.jsx
+    │   │   └── components/
+    │   └── node_modules/
+    └── compiled/       # Compiled/bundled JavaScript
+        ├── main.js
+        └── chunk-123.js
+
+screenRecordings/       # Browser session videos (if --record used)
+└── screen-recording-{hostname}-{timestamp}.mp4
+```
 
 ## Notes
 
-- The script creates `sources` and `screenRecordings` directories in the same location as the script.
-- If a website doesn't use source maps or if they're not accessible, the script will only save the compiled JavaScript files.
-- Screen recording is optional and can be enabled with the `--record` flag.
+- **Chunk Discovery**: This tool is especially powerful for React apps and other single-page applications that use code splitting. It will find chunks that may never load during normal browsing.
+- **Source Maps Required**: The tool can only extract source code if source maps are publicly accessible. Many production sites remove source maps.
+- **Multiple Bundlers**: Works with Webpack, Vite, Rollup, Parcel, and other modern bundlers.
+- **Output Organization**: Files are organized by hostname in the `output/` directory.
+- **Network + Parsing**: Combines network monitoring with intelligent JS parsing for comprehensive coverage.
 
 ## Troubleshooting
 
 If you encounter any issues:
 
-1. Ensure you have the latest versions of the required dependencies.
-2. Check that the website you're targeting allows scraping and doesn't have measures in place to prevent it.
-3. Some websites might not use source maps or might have them protected. In these cases, you'll only get the compiled JavaScript files.
-4. If you're having trouble with screen recording, make sure you have the necessary codecs installed on your system.
+1. **No source maps found**: Many production websites remove source maps. Try development/staging environments.
+2. **Timeout errors**: Increase the timeout value in the code or try a faster network connection.
+3. **Missing chunks**: Some apps may use non-standard chunk naming. The regex patterns can be extended.
+4. **Screen recording issues**: Ensure ffmpeg is installed if using the `--record` option.
+5. **403/401 errors**: Some sites require authentication or block automated requests.
+
+### Common Issues
+
+**Q: The tool only finds a few chunks, but I know there are more**  
+A: Check if the site uses a custom bundler or non-standard chunk naming. You may need to add custom regex patterns to `extractChunkReferences()`.
+
+**Q: Source maps download but extraction fails**  
+A: Some source maps may be malformed or use unsupported formats. Check the console output for specific errors.
+
+**Q: Getting 404 errors for chunk files**  
+A: The chunk URLs might be relative and need different base URL resolution. Check the console to see which URLs are failing.
 
 ## Contributing to Source Map Downloader
 
