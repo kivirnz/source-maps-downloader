@@ -69,14 +69,20 @@ function extractChunkReferences(jsContent, baseUrl) {
   
   // Pattern 3: Standard chunk patterns (fallback)
   const patterns = [
-    // Webpack chunk loading: "chunkId":"filename"
+    // Webpack chunk loading: __webpack_require__.e, "chunkId":"filename"
     /"([^"]+\.chunk\.js)"/g,
     /'([^']+\.chunk\.js)'/g,
     // React/Vite chunks: import("./chunk-xxx.js")
     /import\(["']([^"']+\.js)["']\)/g,
+    // Webpack manifest: {123:"chunk-name.js"}
+    /["']([a-zA-Z0-9_-]+\.js)["']/g,
     // Static imports
     /src=["']([^"']+\.js)["']/g,
     /href=["']([^"']+\.js)["']/g,
+    // Dynamic chunk patterns
+    /\+["']([^"']+\.js)["']/g,
+    // Webpack public path + chunk
+    /\{[0-9]+:["']([^"']+\.js)["']\}/g,
   ];
 
   for (const pattern of patterns) {
