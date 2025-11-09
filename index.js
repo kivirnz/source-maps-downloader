@@ -10,22 +10,73 @@ const { PuppeteerScreenRecorder } = require('puppeteer-screen-recorder');
 function extractChunkReferences(jsContent, baseUrl) {
   const chunks = new Set();
   
-  // Common patterns in webpack/vite/rollup bundles
+  // Pattern 1: Webpack chunk manifest - n.u = e => "path/" + ({id: "name"}[e]||e) + "." + {id: "hash"}[e] + ".chunk.js"
+  const chunkManifestPattern = /n\.u\s*=\s*e\s*=>\s*["']([^"']+)["']\s*\+\s*\(\{([^}]+)\}\[e\][^+]*\)\s*\+\s*["']([^"']*?)["']\s*\+\s*\{([^}]+)\}\[e\]\s*\+\s*["']([^"']+)["']/g;
+  
+  let manifestMatch;
+  while ((manifestMatch = chunkManifestPattern.exec(jsContent)) !== null) {
+    const basePath = manifestMatch[1]; // "static/js/"
+    const nameMap = manifestMatch[2]; // 102:"xlsx",133:"pdfmake"
+    const middlePart = manifestMatch[3]; // "."
+    const hashMap = manifestMatch[4]; // 13:"552027bd",59:"8a314126"
+    const extension = manifestMatch[5]; // ".chunk.js"
+    
+    // Parse the name map {102:"xlsx",133:"pdfmake"}
+    const nameMatches = nameMap.matchAll(/(\d+)\s*:\s*["']([^"']+)["']/g);
+    const names = {};
+    for (const match of nameMatches) {
+      names[match[1]] = match[2];
+    }
+    
+    // Parse the hash map {13:"552027bd",59:"8a314126"}
+    const hashMatches = hashMap.matchAll(/(\d+)\s*:\s*["']([^"']+)["']/g);
+    const hashes = {};
+    for (const match of hashMatches) {
+      hashes[match[1]] = match[2];
+    }
+    
+    // Generate all chunk URLs
+    const allIds = new Set([...Object.keys(names), ...Object.keys(hashes)]);
+    for (const id of allIds) {
+      const chunkName = names[id] || id;
+      const chunkHash = hashes[id];
+      
+      if (chunkHash) {
+        // Store relative path with leading slash to prevent doubling
+        const chunkPath = `/${basePath}${chunkName}${middlePart}${chunkHash}${extension}`;
+        chunks.add(chunkPath);
+      }
+    }
+  }
+  
+  // Pattern 2: Alternative webpack format with CSS - n.miniCssF = e => "path/" + {id: "hash"}[e] + ".chunk.css"
+  const cssManifestPattern = /n\.miniCssF\s*=\s*e\s*=>\s*["']([^"']+)["']\s*\+\s*\{([^}]+)\}\[e\]\s*\+\s*["']([^"']+)["']/g;
+  
+  let cssMatch;
+  while ((cssMatch = cssManifestPattern.exec(jsContent)) !== null) {
+    const basePath = cssMatch[1];
+    const hashMap = cssMatch[2];
+    const extension = cssMatch[3];
+    
+    const hashMatches = hashMap.matchAll(/(\d+)\s*:\s*["']([^"']+)["']/g);
+    for (const match of hashMatches) {
+      const id = match[1];
+      const hash = match[2];
+      const chunkPath = `/${basePath}${id}.${hash}${extension}`;
+      // Note: CSS chunks, but keeping for completeness
+    }
+  }
+  
+  // Pattern 3: Standard chunk patterns (fallback)
   const patterns = [
-    // Webpack chunk loading: __webpack_require__.e, "chunkId":"filename"
+    // Webpack chunk loading: "chunkId":"filename"
     /"([^"]+\.chunk\.js)"/g,
     /'([^']+\.chunk\.js)'/g,
     // React/Vite chunks: import("./chunk-xxx.js")
     /import\(["']([^"']+\.js)["']\)/g,
-    // Webpack manifest: {123:"chunk-name.js"}
-    /["']([a-zA-Z0-9_-]+\.js)["']/g,
     // Static imports
     /src=["']([^"']+\.js)["']/g,
     /href=["']([^"']+\.js)["']/g,
-    // Dynamic chunk patterns
-    /\+["']([^"']+\.js)["']/g,
-    // Webpack public path + chunk
-    /\{[0-9]+:["']([^"']+\.js)["']\}/g,
   ];
 
   for (const pattern of patterns) {
@@ -35,6 +86,10 @@ function extractChunkReferences(jsContent, baseUrl) {
       // Skip data URIs and external URLs
       if (chunkPath.startsWith('data:') || chunkPath.startsWith('http://') || chunkPath.startsWith('https://')) {
         continue;
+      }
+      // Add leading slash if not present to ensure proper URL resolution
+      if (!chunkPath.startsWith('/')) {
+        chunkPath = '/' + chunkPath;
       }
       chunks.add(chunkPath);
     }
@@ -50,6 +105,7 @@ async function findMainJsFiles(page, baseUrl) {
     return scripts.map(script => script.src);
   });
 
+  console.log(scriptUrls);
   console.log(`Found ${scriptUrls.length} script tags on page`);
   
   // Prioritize main, runtime, vendor, app files
