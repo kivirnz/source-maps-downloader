@@ -211,4 +211,4 @@ function extractObjects(str) {
   return objects;
 }
 
-export { extractChunkReferences };
+module.exports = { extractChunkReferences };
